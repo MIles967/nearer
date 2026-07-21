@@ -212,6 +212,39 @@
   .crisis-line-action.alt{
     background:var(--ink,#26201a);
   }
+  .crisis-line.danger{
+    border-color:rgba(198,40,40,0.55);
+    background:#FFF5F5;
+  }
+  .crisis-line-action.danger{
+    background:#C62828;
+  }
+  .crisis-disclaimer{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+    line-height:1.65;
+    color:var(--charcoal-soft,#6b6b6b);
+    background:rgba(199,154,75,0.10);
+    border:1px solid rgba(199,154,75,0.28);
+    border-radius:12px;
+    padding:12px 14px;
+    margin-bottom:18px;
+  }
+  .crisis-verse-link{
+    display:block;
+    width:100%;
+    text-align:center;
+    background:transparent;
+    border:1px solid rgba(199,154,75,0.4);
+    border-radius:999px;
+    padding:13px 16px;
+    margin:20px 0 8px 0;
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-size:15px;
+    color:var(--ink,#26201a);
+    cursor:pointer;
+  }
   .crisis-divider{
     display:flex;
     align-items:center;
@@ -1234,7 +1267,7 @@
       <button class="tab-btn" data-tab="today"><span class="tab-btn-inner"><span class="tab-icon">☀</span>Today</span></button>
       <button class="tab-btn" data-tab="read"><span class="tab-btn-inner"><span class="tab-icon">📖</span>Read</span></button>
       <button class="tab-btn" data-tab="feelings"><span class="tab-btn-inner"><span class="tab-icon">◐</span>Feelings</span></button>
-      <button class="tab-btn" data-tab="community"><span class="tab-btn-inner"><span class="tab-icon">✦</span>Together</span></button>
+      <button class="tab-btn" data-tab="community"><span class="tab-btn-inner"><span class="tab-icon">✦</span>Journal</span></button>
       <button class="tab-btn" data-tab="me"><span class="tab-btn-inner"><span class="tab-icon">◔</span>Me</span></button>
     </div>
   </div>
@@ -3709,9 +3742,12 @@ function renderContinuePopup(){
 // RENDER: ANNOTATION SHEET
 // ============================================================
 // ---- Crisis support: immediate help + Scripture for the darkest moments ----
-const CRISIS_LINES = [
-  { name:"988 Suicide & Crisis Lifeline", desc:"Call \u00b7 free, 24/7, confidential", href:"tel:988", action:"Call 988" },
-  { name:"988 Lifeline by text", desc:"Text if talking feels like too much", href:"sms:988", action:"Text 988", alt:true },
+// US crisis lines shown numbers-FIRST. Per council: a person in acute crisis must reach
+// a real human in one tap, not scroll past Scripture. Verses live behind a second tap.
+const CRISIS_LINES_US = [
+  { name:"Emergency", desc:"If you are in immediate danger right now", href:"tel:911", action:"Call 911", danger:true },
+  { name:"988 Suicide & Crisis Lifeline", desc:"Free, 24/7, confidential \u00b7 a trained person answers", href:"tel:988", action:"Call 988" },
+  { name:"988 by text", desc:"If talking out loud feels like too much", href:"sms:988", action:"Text 988", alt:true },
   { name:"Crisis Text Line", desc:"Text HOME to reach a trained counselor", href:"sms:741741?&body=HOME", action:"Text 741741", alt:true }
 ];
 const CRISIS_VERSES = [
@@ -3721,31 +3757,58 @@ const CRISIS_VERSES = [
   { text:"When you pass through the waters, I will be with you; and through the rivers, they will not overflow you.", ref:"Isaiah 43:2" },
   { text:"I have loved you with an everlasting love. Therefore I have drawn you with loving kindness.", ref:"Jeremiah 31:3" }
 ];
+function isUSLocale(){
+  try { return (navigator.language || 'en-US').toLowerCase().indexOf('us') !== -1 || (navigator.language||'').toLowerCase() === 'en'; }
+  catch(e){ return true; }
+}
 function renderCrisis(){
   if(!state.crisisOpen) return '';
-  const lines = CRISIS_LINES.map(l =>
-    `<a class="crisis-line" href="${l.href}">
+  // Second screen: sit with a verse (only reached by an explicit tap).
+  if(state.crisisView === 'verses'){
+    const verses = CRISIS_VERSES.map(v =>
+      `<div class="crisis-verse">
+         <div class="crisis-verse-text">${escapeHtml(v.text)}</div>
+         <div class="crisis-verse-ref">${escapeHtml(v.ref)}</div>
+       </div>`).join('');
+    return `
+      <div class="crisis-backdrop" id="crisis-backdrop">
+        <div class="crisis-panel">
+          <button class="crisis-close" id="crisis-back-help">← back to help</button>
+          <div class="crisis-heading">Sit here a moment. You are held.</div>
+          <div class="crisis-divider"><span>be near to God</span></div>
+          ${verses}
+          <a class="crisis-line" href="tel:988" style="margin-top:8px;">
+            <span><span class="crisis-line-name">Still need someone?</span>
+            <span class="crisis-line-desc">988 is there, right now</span></span>
+            <span class="crisis-line-action">Call 988</span>
+          </a>
+        </div>
+      </div>`;
+  }
+  // First screen: HELP FIRST. Numbers pinned at the top, one tap each.
+  const lines = CRISIS_LINES_US.map(l =>
+    `<a class="crisis-line${l.danger ? ' danger' : ''}" href="${l.href}">
        <span>
          <span class="crisis-line-name">${escapeHtml(l.name)}</span>
          <span class="crisis-line-desc">${escapeHtml(l.desc)}</span>
        </span>
-       <span class="crisis-line-action${l.alt ? ' alt' : ''}">${escapeHtml(l.action)}</span>
+       <span class="crisis-line-action${l.danger ? ' danger' : (l.alt ? ' alt' : '')}">${escapeHtml(l.action)}</span>
      </a>`).join('');
-  const verses = CRISIS_VERSES.map(v =>
-    `<div class="crisis-verse">
-       <div class="crisis-verse-text">${escapeHtml(v.text)}</div>
-       <div class="crisis-verse-ref">${escapeHtml(v.ref)}</div>
-     </div>`).join('');
+  const intl = isUSLocale() ? '' :
+    `<a class="crisis-line" href="https://findahelpline.com" target="_blank" rel="noopener">
+       <span><span class="crisis-line-name">Find a helpline near you</span>
+       <span class="crisis-line-desc">988 is US-only \u00b7 findahelpline.com lists your country</span></span>
+       <span class="crisis-line-action alt">Open</span>
+     </a>`;
   return `
     <div class="crisis-backdrop" id="crisis-backdrop">
       <div class="crisis-panel">
         <button class="crisis-close" id="crisis-close">← back</button>
-        <div class="crisis-heading">You are not alone, and this moment can pass.</div>
-        <div class="crisis-sub">If you are thinking about harming yourself, please reach out right now. A caring person is ready to talk with you.</div>
-        <div class="crisis-lines">${lines}</div>
-        <div class="crisis-divider"><span>and be near to God</span></div>
-        ${verses}
-        <div class="crisis-footnote">If you are in immediate danger, call 911 (US). Outside the US, find a local helpline at findahelpline.com. You matter, and staying is worth it.</div>
+        <div class="crisis-disclaimer">Nearer is not a counselor, therapist, or crisis service, and cannot monitor you or respond to messages. If you are in danger, please use a number below.</div>
+        <div class="crisis-heading">You are not alone. Reach a real person now.</div>
+        <div class="crisis-lines">${lines}${intl}</div>
+        <button class="crisis-verse-link" id="crisis-go-verses">I want to sit with a verse first →</button>
+        <div class="crisis-footnote">Outside the US, find a local helpline at findahelpline.com. You matter, and staying is worth it.</div>
       </div>
     </div>`;
 }
@@ -3830,15 +3893,15 @@ function timeAgo(ts){
 function renderCommunity(){
   return `
     <div class="section" style="margin-top:16px;">
-      <div class="section-head"><div class="section-title">Together</div></div>
+      <div class="section-head"><div class="section-title">Journal</div></div>
       <div class="card post-form">
-        <div class="eyebrow" style="margin-bottom:8px;">Share a reflection — visible to everyone using this app</div>
+        <div class="eyebrow" style="margin-bottom:8px;">Your private reflections — saved only on this device</div>
         <input id="post-verse-input" placeholder="Verse reference (optional), e.g. Psalm 23:1" />
         <textarea id="post-text-input" placeholder="What's on your heart?" style="min-height:60px;"></textarea>
-        <button class="btn btn-primary" id="submit-post" style="width:100%;">Post</button>
+        <button class="btn btn-primary" id="submit-post" style="width:100%;">Save reflection</button>
       </div>
       <div id="posts-list">
-        ${state.posts.length === 0 ? `<div class="empty-state">No reflections yet. Be the first to share something.</div>` : state.posts.map(p => {
+        ${state.posts.length === 0 ? `<div class="empty-state">Your journal is empty. Write your first reflection above — it stays private to you.</div>` : state.posts.map(p => {
           const replies = p.replies || [];
           const replyOpen = state.openReplyPostId === p.id;
           return `
@@ -4043,11 +4106,15 @@ function attachHandlers(){
   });
 
   const helpBtn = document.getElementById('help-btn');
-  if(helpBtn) helpBtn.onclick = () => { state.crisisOpen = true; render(); };
+  if(helpBtn) helpBtn.onclick = () => { state.crisisOpen = true; state.crisisView = 'help'; render(); };
   const crisisClose = document.getElementById('crisis-close');
-  if(crisisClose) crisisClose.onclick = () => { state.crisisOpen = false; render(); };
+  if(crisisClose) crisisClose.onclick = () => { state.crisisOpen = false; state.crisisView = 'help'; render(); };
+  const crisisGoVerses = document.getElementById('crisis-go-verses');
+  if(crisisGoVerses) crisisGoVerses.onclick = () => { state.crisisView = 'verses'; render(); };
+  const crisisBackHelp = document.getElementById('crisis-back-help');
+  if(crisisBackHelp) crisisBackHelp.onclick = () => { state.crisisView = 'help'; render(); };
   const crisisBackdrop = document.getElementById('crisis-backdrop');
-  if(crisisBackdrop) crisisBackdrop.onclick = (e) => { if(e.target.id === 'crisis-backdrop'){ state.crisisOpen = false; render(); } };
+  if(crisisBackdrop) crisisBackdrop.onclick = (e) => { if(e.target.id === 'crisis-backdrop'){ state.crisisOpen = false; state.crisisView = 'help'; render(); } };
 
   const backdrop = document.getElementById('sheet-backdrop');
   if(backdrop){
