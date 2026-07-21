@@ -1245,6 +1245,47 @@
     color:#fff;
   }
 
+  /* ---------- guided 2-minute flow ---------- */
+  .flow-start-btn{
+    display:block; width:100%;
+    background:var(--ink,#1E2A44); color:#fff;
+    border:none; border-radius:14px;
+    padding:15px 18px; margin:0 0 16px 0;
+    font-family:'Fraunces',serif; font-size:16px;
+    cursor:pointer;
+    box-shadow:0 10px 26px -16px rgba(30,42,68,0.6);
+  }
+  .flow-wrap{ --flow-color:#6E8CA0; padding:4px 2px; }
+  .flow-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; }
+  .flow-exit{ background:transparent; border:none; color:var(--charcoal-soft); font-family:'IBM Plex Mono',monospace; font-size:12px; cursor:pointer; }
+  .flow-dots{ display:flex; gap:6px; }
+  .flow-dot{ width:7px; height:7px; border-radius:50%; background:var(--line); transition:background .3s; }
+  .flow-dot.on{ background:var(--flow-color); transform:scale(1.25); }
+  .flow-dot.done{ background:var(--flow-color); opacity:0.45; }
+  .flow-card{
+    background:var(--card); border:1px solid var(--line);
+    border-left:4px solid var(--flow-color);
+    border-radius:18px; padding:30px 24px; min-height:210px;
+    display:flex; flex-direction:column; justify-content:center;
+    box-shadow:0 12px 34px -22px rgba(30,42,68,0.4);
+  }
+  .flow-eyebrow{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--flow-color); margin-bottom:16px; }
+  .flow-body{ font-family:'Fraunces',serif; font-size:20px; line-height:1.6; color:var(--ink); }
+  .flow-verse .flow-body{ font-style:italic; }
+  .flow-breath .flow-body{ text-align:center; font-size:19px; }
+  .flow-prayer .flow-body{ font-style:italic; color:var(--ink-soft); }
+  .flow-ref{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.06em; color:var(--flow-color); margin-top:16px; }
+  .flow-nav{ display:flex; align-items:center; justify-content:space-between; margin-top:20px; }
+  .flow-back{ background:transparent; border:none; color:var(--charcoal-soft); font-family:'IBM Plex Mono',monospace; font-size:13px; cursor:pointer; }
+  .flow-next{ border:none; border-radius:999px; padding:13px 24px; font-family:'Fraunces',serif; font-size:15px; cursor:pointer; }
+  .flow-next.primary{ background:var(--flow-color); color:#fff; }
+  .flow-notok{
+    display:block; width:100%; margin-top:22px;
+    background:transparent; border:1px solid rgba(198,40,40,0.4);
+    color:#C62828; border-radius:999px; padding:12px;
+    font-family:'IBM Plex Mono',monospace; font-size:12px; cursor:pointer;
+  }
+
   /* ---------- dark mode (for 3am, in the dark) ---------- */
   /* A true warm-dark theme, not an inversion: deep charcoal ground, cream ink. */
   body.dark{
@@ -3287,35 +3328,66 @@ const BIBLE = {
 
 const BOOK_ORDER = ["Genesis 1","Psalm 23","Psalm 46","Proverbs 3","Isaiah 41","Matthew 5","John 3","John 14","Romans 8","Romans 12","1 Corinthians 13","Philippians 4"];
 
-// Maps a canonical Bible book name to the chapter-keys we have content for (in BIBLE).
-const AVAILABLE_CONTENT = {
-  "Genesis": Array.from({length:50}, (_,i) => "Genesis "+(i+1)),
-  "Psalms": ["Psalm 23","Psalm 46"],
-  "Proverbs": ["Proverbs 3"],
-  "Isaiah": ["Isaiah 41"],
-  "Matthew": ["Matthew 5"],
-  "John": ["John 3","John 14"],
-  "Romans": ["Romans 8","Romans 12"],
-  "1 Corinthians": ["1 Corinthians 13"],
-  "Philippians": ["Philippians 4"]
+// Maps a canonical Bible book name to its chapter-keys. Populated from bible/manifest.json
+// at boot so the whole 66-book WEB is browsable; book text is fetched on demand.
+let AVAILABLE_CONTENT = {
+  "Genesis": Array.from({length:50}, (_,i) => "Genesis "+(i+1))
 };
+// slug lookup per book, filled from the manifest
+const BOOK_SLUG = {};
+// which book slugs have already been fetched+merged into BIBLE
+const LOADED_BOOKS = {};
 
 const OLD_TESTAMENT_BOOKS = ["Genesis","Exodus","Leviticus","Numbers","Deuteronomy","Joshua","Judges","Ruth","1 Samuel","2 Samuel","1 Kings","2 Kings","1 Chronicles","2 Chronicles","Ezra","Nehemiah","Esther","Job","Psalms","Proverbs","Ecclesiastes","Song of Solomon","Isaiah","Jeremiah","Lamentations","Ezekiel","Daniel","Hosea","Joel","Amos","Obadiah","Jonah","Micah","Nahum","Habakkuk","Zephaniah","Haggai","Zechariah","Malachi"];
 
 const NEW_TESTAMENT_BOOKS = ["Matthew","Mark","Luke","John","Acts","Romans","1 Corinthians","2 Corinthians","Galatians","Ephesians","Philippians","Colossians","1 Thessalonians","2 Thessalonians","1 Timothy","2 Timothy","Titus","Philemon","Hebrews","James","1 Peter","2 Peter","1 John","2 John","3 John","Jude","Revelation"];
 
 // Reverse lookup: chapter-key -> canonical book name, for headers/popups.
-const CHAPTER_TO_BOOK = {};
-Object.entries(AVAILABLE_CONTENT).forEach(([book, keys]) => {
-  keys.forEach(k => { CHAPTER_TO_BOOK[k] = book; });
-});
+let CHAPTER_TO_BOOK = {};
+// Flattened reading order across the whole Bible — powers continuous navigation.
+let READING_SEQUENCE = [];
+function rebuildBibleIndexes(){
+  CHAPTER_TO_BOOK = {};
+  Object.entries(AVAILABLE_CONTENT).forEach(([book, keys]) => {
+    keys.forEach(k => { CHAPTER_TO_BOOK[k] = book; });
+  });
+  READING_SEQUENCE = [];
+  [...OLD_TESTAMENT_BOOKS, ...NEW_TESTAMENT_BOOKS].forEach(book => {
+    if(AVAILABLE_CONTENT[book]) READING_SEQUENCE.push(...AVAILABLE_CONTENT[book]);
+  });
+}
+rebuildBibleIndexes();
 
-// Flattened reading order across the whole Bible (OT then NT, canonical book order,
-// each book's chapters in order) — powers continuous "read like a book" navigation.
-const READING_SEQUENCE = [];
-[...OLD_TESTAMENT_BOOKS, ...NEW_TESTAMENT_BOOKS].forEach(book => {
-  if(AVAILABLE_CONTENT[book]) READING_SEQUENCE.push(...AVAILABLE_CONTENT[book]);
-});
+// Load the manifest and make every book browsable (text fetched lazily per book).
+async function loadBibleManifest(){
+  try{
+    const res = await fetch('bible/manifest.json');
+    if(!res.ok) return;
+    const m = await res.json();
+    const av = {};
+    Object.entries(m.books).forEach(([book, info]) => {
+      av[book] = info.keys;
+      BOOK_SLUG[book] = info.slug;
+    });
+    AVAILABLE_CONTENT = av;
+    rebuildBibleIndexes();
+  }catch(e){ /* offline or missing manifest: keep bundled Genesis */ }
+}
+
+// Fetch a book's text on demand and merge into BIBLE. Safe to call repeatedly.
+async function ensureLoaded(chapterKey){
+  const book = CHAPTER_TO_BOOK[chapterKey];
+  if(!book) return;
+  const slug = BOOK_SLUG[book];
+  if(!slug || LOADED_BOOKS[slug]) return;
+  try{
+    const res = await fetch('bible/'+slug+'.json');
+    if(!res.ok) return;
+    const data = await res.json();
+    Object.assign(BIBLE, data);
+    LOADED_BOOKS[slug] = true;
+  }catch(e){ /* leave BIBLE as-is; reader guards for missing chapter */ }
+}
 function nextChapterKey(key){
   const i = READING_SEQUENCE.indexOf(key);
   return (i === -1 || i === READING_SEQUENCE.length-1) ? null : READING_SEQUENCE[i+1];
@@ -3405,6 +3477,52 @@ const FEELINGS = [
     {ref:"Isaiah 26:3", text:"You will keep whoever's mind is steadfast, in perfect peace, because he trusts in you."}
   ]}
 ];
+
+// Guided 2-minute flows for the hardest states. A narrow, gentle path through the worst
+// two minutes: one verse, one line of context, one breath, one prayer, one small next step.
+// Every flow ends with a way back to real help. Keyed by FEELINGS id.
+const GUIDED_FLOWS = {
+  anxious: {
+    open: "Let's slow this down together. Just the next two minutes.",
+    verse: { ref:"Philippians 4:6-7", text:"In nothing be anxious, but in everything, by prayer and petition with thanksgiving, let your requests be made known to God. And the peace of God, which surpasses all understanding, will guard your hearts and your thoughts." },
+    context: "Paul wrote this from prison. Peace here is not the absence of trouble \u2014 it is God standing guard over a heart that is still in the storm.",
+    breath: "Breathe in slowly for 4. Hold for 4. Out for 6. Three times.",
+    prayer: "Father, I hand You the thing I keep gripping. Guard my heart where I cannot. Amen.",
+    action: "Name one worry out loud, and one thing that is still true and good right now."
+  },
+  fear: {
+    open: "You are safe enough to take one slow breath. Start there.",
+    verse: { ref:"Isaiah 41:10", text:"Don't be afraid, for I am with you. Don't be dismayed, for I am your God. I will strengthen you. I will help you. I will uphold you with the right hand of my righteousness." },
+    context: "God does not say the danger is not real. He says you will not face it alone, and He is stronger than what you fear.",
+    breath: "In for 4, out for 6. Feel your feet on the ground as you do.",
+    prayer: "Lord, I am afraid. Be nearer to me than the fear is. Hold me up. Amen.",
+    action: "Text or call one person who makes you feel safe, even just to say hi."
+  },
+  grief: {
+    open: "There is no rush here. Grief is allowed to take the time it takes.",
+    verse: { ref:"Psalm 34:18", text:"Yahweh is near to those who have a broken heart, and saves those who have a crushed spirit." },
+    context: "Scripture never tells the grieving to hurry up. God draws closest to broken hearts, not further away.",
+    breath: "Breathe gently. You do not have to hold it all together for the next minute.",
+    prayer: "God, You are near to the brokenhearted. Be near to mine. I miss them. Amen.",
+    action: "Let yourself feel one memory, or say the name that hurts to say."
+  },
+  lonely: {
+    open: "Right now, in this, you are not as alone as it feels.",
+    verse: { ref:"Hebrews 13:5", text:"I will in no way leave you, neither will I in any way forsake you." },
+    context: "This is God's own promise, repeated so many times in Scripture because He knew we would need to hear it again and again.",
+    breath: "In for 4, out for 6. You are held, even in an empty room.",
+    prayer: "Lord, when no one is here, You are. Help me feel it. Amen.",
+    action: "Reach out to one person, even a short message. Or write one in your Journal."
+  },
+  peace: {
+    open: "Too much at once. Let's put down everything but this one moment.",
+    verse: { ref:"Matthew 11:28", text:"Come to me, all you who labor and are heavily burdened, and I will give you rest." },
+    context: "Jesus does not add another task. He offers to carry the weight with you. The invitation is to come, not to perform.",
+    breath: "In for 4, hold 4, out for 6. Let your shoulders drop.",
+    prayer: "Jesus, it is too heavy. I come to You. Take the part I cannot carry. Amen.",
+    action: "Pick the single next thing that must happen. Let the rest wait."
+  }
+};
 
 // Gentle invitations shown at the top of a chapter, to create a threshold into reading.
 const READING_INVITATIONS = [
@@ -3496,6 +3614,8 @@ let state = {
   posts: [],
   currentBook: BOOK_ORDER[0],
   activeFeeling: null,
+  flowFeeling: null,
+  flowStep: 0,
   sheetVerseKey: null,
   loaded: false,
   showContinuePopup: false,
@@ -3681,7 +3801,9 @@ function renderToday(){
       </div>
       <div class="streak-row">
         <div class="streak-count">last 7 days</div>
-        <div class="streak-count"><b>${state.streak.count||0}</b> day streak</div>
+        <div class="streak-count">${(state.streak.count||0) > 0
+          ? `<b>${state.streak.count}</b> ${state.streak.count===1?'day':'days'} with Nearer`
+          : `however long it's been, welcome back`}</div>
       </div>
     </div>
 
@@ -3702,7 +3824,7 @@ function renderToday(){
     </div>
 
     <div class="note-banner">
-      This starter library includes a hand-picked set of chapters in the World English Bible (public domain). Connect your own ESV API key to unlock the full 66 books with the English Standard Version.
+      Scripture is the World English Bible (public domain). Read any book any time — this is yours to keep, always free.
     </div>
   `;
 }
@@ -3712,6 +3834,11 @@ function renderToday(){
 // ============================================================
 function renderRead(){
   const chapter = BIBLE[state.currentBook];
+  if(!chapter){
+    // Text not loaded yet (slow/offline). Fetch it, then re-render.
+    ensureLoaded(state.currentBook).then(() => { if(BIBLE[state.currentBook]) render(); });
+    return `<div class="reader"><div class="empty-state" style="margin-top:40px;">Opening ${escapeHtml(state.currentBook)}\u2026</div></div>`;
+  }
   const nextKey = nextChapterKey(state.currentBook);
   const prevKey = prevChapterKey(state.currentBook);
   const invitation = invitationForChapter(state.currentBook);
@@ -3802,7 +3929,7 @@ function renderBookBrowser(){
             ${keys.map(k => `
               <div class="chapter-pick-row" data-pick-chapter="${escapeHtml(k)}">
                 <div class="chapter-pick-name">${escapeHtml(k)}</div>
-                <div class="chapter-pick-ref">${escapeHtml(BIBLE[k].ref)}</div>
+                <div class="chapter-pick-ref">${escapeHtml((BIBLE[k] && BIBLE[k].ref) || k)}</div>
               </div>
             `).join('')}
           </div>
@@ -3960,9 +4087,52 @@ function renderSheet(){
 // ============================================================
 // RENDER: FEELINGS
 // ============================================================
+function renderFlow(){
+  const f = FEELINGS.find(x => x.id === state.flowFeeling);
+  const flow = GUIDED_FLOWS[state.flowFeeling];
+  if(!f || !flow) return '';
+  // Steps: 0 open, 1 verse, 2 context, 3 breath, 4 prayer, 5 action+close
+  const steps = [
+    { eyebrow:"A moment with you", body:flow.open, kind:"open" },
+    { eyebrow:"Hear this", body:'\u201c'+flow.verse.text+'\u201d', ref:flow.verse.ref, kind:"verse" },
+    { eyebrow:"What it means", body:flow.context, kind:"context" },
+    { eyebrow:"Breathe", body:flow.breath, kind:"breath" },
+    { eyebrow:"Pray with me", body:flow.prayer, kind:"prayer" },
+    { eyebrow:"One small step", body:flow.action, kind:"action" }
+  ];
+  const i = Math.max(0, Math.min(state.flowStep, steps.length-1));
+  const step = steps[i];
+  const last = i === steps.length-1;
+  const dots = steps.map((s,n)=>`<span class="flow-dot ${n===i?'on':''} ${n<i?'done':''}"></span>`).join('');
+  return `
+    <div class="flow-wrap" style="--flow-color:${f.color};">
+      <div class="flow-top">
+        <button class="flow-exit" id="flow-exit">\u2190 leave</button>
+        <div class="flow-dots">${dots}</div>
+      </div>
+      <div class="flow-card flow-${step.kind}">
+        <div class="flow-eyebrow">${step.eyebrow}</div>
+        <div class="flow-body">${escapeHtml(step.body)}</div>
+        ${step.ref ? `<div class="flow-ref">${escapeHtml(step.ref)}</div>` : ''}
+      </div>
+      <div class="flow-nav">
+        ${i>0 ? `<button class="flow-back" id="flow-back">back</button>` : `<span></span>`}
+        ${last
+          ? `<button class="flow-next primary" id="flow-done">Amen \u00b7 finish</button>`
+          : `<button class="flow-next primary" id="flow-next">continue \u2192</button>`}
+      </div>
+      <button class="flow-notok" id="flow-notok">I'm still not okay \u2192 get help now</button>
+    </div>
+  `;
+}
+
 function renderFeelings(){
+  if(state.flowFeeling){
+    return `<div class="section" style="margin-top:12px;">${renderFlow()}</div>`;
+  }
   if(state.activeFeeling){
     const f = FEELINGS.find(x => x.id === state.activeFeeling);
+    const hasFlow = !!GUIDED_FLOWS[state.activeFeeling];
     return `
       <div class="section" style="margin-top:16px;">
         <button class="back-link" id="back-to-feelings">← all feelings</button>
@@ -3970,6 +4140,7 @@ function renderFeelings(){
           <div class="eyebrow" style="color:rgba(255,255,255,0.85);">When you feel</div>
           <h2 style="color:#fff;">${f.label}</h2>
         </div>
+        ${hasFlow ? `<button class="flow-start-btn" id="flow-start" data-flow="${f.id}">\u2726 Walk with me for 2 minutes</button>` : ''}
         ${f.verses.map(v => `
           <div class="feeling-verse-card">
             <div class="feeling-verse-text">"${escapeHtml(v.text)}"</div>
@@ -4089,11 +4260,11 @@ function renderMe(){
       <div class="stat-grid">
         <div class="stat-card">
           <div class="stat-num">${state.streak.count||0}</div>
-          <div class="stat-label">Current streak</div>
+          <div class="stat-label">${(state.streak.count||0)===1?'day':'days'} with Nearer</div>
         </div>
         <div class="stat-card">
           <div class="stat-num">${state.streak.longest||0}</div>
-          <div class="stat-label">Longest streak</div>
+          <div class="stat-label">longest so far</div>
         </div>
       </div>
       <div class="section-head"><div class="section-title">Your highlights & notes</div></div>
@@ -4147,6 +4318,18 @@ function attachHandlers(){
   document.querySelectorAll('[data-feeling]').forEach(el => {
     el.onclick = () => { state.activeFeeling = el.dataset.feeling; state.tab='feelings'; render(); scrollAppToTop(); };
   });
+  const flowStart = document.getElementById('flow-start');
+  if(flowStart) flowStart.onclick = () => { state.flowFeeling = flowStart.dataset.flow; state.flowStep = 0; render(); scrollAppToTop(); };
+  const flowNext = document.getElementById('flow-next');
+  if(flowNext) flowNext.onclick = () => { state.flowStep = (state.flowStep||0) + 1; render(); scrollAppToTop(); };
+  const flowBack = document.getElementById('flow-back');
+  if(flowBack) flowBack.onclick = () => { state.flowStep = Math.max(0,(state.flowStep||0) - 1); render(); scrollAppToTop(); };
+  const flowExit = document.getElementById('flow-exit');
+  if(flowExit) flowExit.onclick = () => { state.flowFeeling = null; state.flowStep = 0; render(); scrollAppToTop(); };
+  const flowDone = document.getElementById('flow-done');
+  if(flowDone) flowDone.onclick = () => { state.flowFeeling = null; state.flowStep = 0; render(); scrollAppToTop(); };
+  const flowNotOk = document.getElementById('flow-notok');
+  if(flowNotOk) flowNotOk.onclick = () => { state.crisisOpen = true; state.crisisView = 'help'; render(); };
   const seeAll = document.getElementById('see-all-feelings');
   if(seeAll) seeAll.onclick = () => { state.activeFeeling = null; state.tab='feelings'; render(); };
   const backFeel = document.getElementById('back-to-feelings');
@@ -4157,9 +4340,10 @@ function attachHandlers(){
 
   const nextChapterBtn = document.getElementById('next-chapter-btn');
   if(nextChapterBtn){
-    nextChapterBtn.onclick = () => {
+    nextChapterBtn.onclick = async () => {
       const next = nextChapterKey(state.currentBook);
       if(!next) return;
+      await ensureLoaded(next);
       state.currentBook = next;
       saveReadingProgress();
       render();
@@ -4168,9 +4352,10 @@ function attachHandlers(){
   }
   const prevChapterBtn = document.getElementById('prev-chapter-btn');
   if(prevChapterBtn){
-    prevChapterBtn.onclick = () => {
+    prevChapterBtn.onclick = async () => {
       const prev = prevChapterKey(state.currentBook);
       if(!prev) return;
+      await ensureLoaded(prev);
       state.currentBook = prev;
       saveReadingProgress();
       render();
@@ -4198,10 +4383,11 @@ function attachHandlers(){
     btn.onclick = () => { state.bookBrowserTestament = btn.dataset.testament; render(); };
   });
   document.querySelectorAll('[data-pick-book]').forEach(row => {
-    row.onclick = () => {
+    row.onclick = async () => {
       const book = row.dataset.pickBook;
       const keys = AVAILABLE_CONTENT[book] || [];
       if(keys.length === 1){
+        await ensureLoaded(keys[0]);
         state.currentBook = keys[0];
         saveReadingProgress();
         state.bookBrowserOpen = false;
@@ -4217,7 +4403,8 @@ function attachHandlers(){
   const backToBooks = document.getElementById('browser-back-to-books');
   if(backToBooks) backToBooks.onclick = () => { state.bookBrowserBook = null; render(); };
   document.querySelectorAll('[data-pick-chapter]').forEach(row => {
-    row.onclick = () => {
+    row.onclick = async () => {
+      await ensureLoaded(row.dataset.pickChapter);
       state.currentBook = row.dataset.pickChapter;
       saveReadingProgress();
       state.bookBrowserOpen = false;
@@ -4394,7 +4581,9 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 // INIT
 // ============================================================
 (async function init(){
+  await loadBibleManifest();
   await loadAll();
+  await ensureLoaded(state.currentBook);
   if(state.hasReadingProgress) state.showContinuePopup = true;
   render();
 })();
