@@ -1014,6 +1014,45 @@
   .popup-body{font-size:13.5px;color:var(--charcoal-soft);line-height:1.5;margin-bottom:18px;}
   .popup-body b{color:var(--ink);}
   .popup-btns{display:flex;gap:10px;}
+  /* ---------- full-screen reading mode ---------- */
+  /* When the Read tab is active, let Scripture fill the whole screen
+     instead of sitting inside a narrow, boxed "scroll". */
+  #app.reading{
+    max-width:none;
+  }
+  #app.reading .reader{
+    margin:14px auto 0 auto;
+    max-width:820px;
+    padding:0 clamp(16px, 5vw, 60px);
+    box-sizing:border-box;
+  }
+  /* Drop the card framing so the text reads like an open page. */
+  #app.reading .scroll-surface{
+    background:transparent;
+    border:none;
+    border-radius:0;
+    box-shadow:none;
+    padding:26px 0 30px 0;
+  }
+  #app.reading .scroll-surface::before{
+    display:none;
+  }
+  /* Let the verses breathe across the wider surface. */
+  #app.reading .verse-body{
+    font-size:18px;
+    line-height:1.72;
+  }
+  #app.reading .reader-invitation .invitation-whisper,
+  #app.reading .reader-closing .closing-prayer{
+    max-width:520px;
+  }
+  /* Keep the top and bottom navigation comfortably centered. */
+  #app.reading .reader-toolbar,
+  #app.reading .chapter-nav{
+    max-width:820px;
+    margin-left:auto;
+    margin-right:auto;
+  }
 </style>
 </head>
 <body>
@@ -3698,6 +3737,9 @@ function render(){
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === state.tab);
   });
+
+  var appEl = document.getElementById('app');
+  if(appEl) appEl.classList.toggle('reading', state.tab === 'read');
 
   attachHandlers();
 }
