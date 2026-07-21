@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Nearer" />
+<meta name="theme-color" content="#191512" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
 <title>Nearer — Daily Scripture</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1207,6 +1212,67 @@
   .popup-body{font-size:13.5px;color:var(--charcoal-soft);line-height:1.5;margin-bottom:18px;}
   .popup-body b{color:var(--ink);}
   .popup-btns{display:flex;gap:10px;}
+  .theme-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin:14px 0 6px 0;
+  }
+  .theme-label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    letter-spacing:0.06em;
+    color:var(--charcoal-soft);
+    text-transform:uppercase;
+  }
+  .theme-seg{
+    display:inline-flex;
+    border:1px solid var(--line);
+    border-radius:999px;
+    overflow:hidden;
+  }
+  .theme-opt{
+    background:transparent;
+    border:none;
+    padding:7px 14px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    color:var(--charcoal-soft);
+    cursor:pointer;
+  }
+  .theme-opt.on{
+    background:var(--coral);
+    color:#fff;
+  }
+
+  /* ---------- dark mode (for 3am, in the dark) ---------- */
+  /* A true warm-dark theme, not an inversion: deep charcoal ground, cream ink. */
+  body.dark{
+    --ink:#EDE4D3;
+    --ink-soft:#C9BEA8;
+    --parchment:#191512;
+    --card:#221D18;
+    --coral:#E2896F;
+    --coral-deep:#E2896F;
+    --gold:#D3AE6A;
+    --charcoal:#EDE4D3;
+    --charcoal-soft:#A79C88;
+    --line:#3A322A;
+    background:#191512;
+  }
+  body.dark .scroll-surface{
+    background:linear-gradient(180deg,#221D18 0%,#1C1713 100%) !important;
+  }
+  body.dark #app.reading .scroll-surface{
+    background:transparent !important;
+  }
+  body.dark .crisis-panel{
+    background:linear-gradient(180deg,#221D18 0%,#191512 100%);
+  }
+  body.dark .crisis-line{ background:#221D18; }
+  body.dark .crisis-line.danger{ background:#2A1A1A; }
+  body.dark .help-btn{ box-shadow:0 4px 14px -6px rgba(226,137,111,0.5); }
+
   /* ---------- full-screen reading mode ---------- */
   /* When the Read tab is active, let Scripture fill the whole screen
      instead of sitting inside a narrow, boxed "scroll". */
@@ -3393,6 +3459,35 @@ const MOOD_COLOR_LIST = [
 // ============================================================
 // STATE
 // ============================================================
+// Persistence shim: the app was written against an external `window.storage` host
+// API that does not exist on a plain static host (e.g. GitHub Pages). Without this,
+// streaks, highlights, profile, journal, and theme silently never save. Back it with
+// localStorage so everything persists on the user's own device.
+if(!window.storage){
+  window.storage = {
+    async get(key){
+      try{ const v = localStorage.getItem('nearer:'+key); return v===null ? null : { value: v }; }
+      catch(e){ return null; }
+    },
+    async set(key, value){
+      try{ localStorage.setItem('nearer:'+key, value); }catch(e){}
+    },
+    async list(prefix){
+      const keys = [];
+      try{
+        for(let i=0;i<localStorage.length;i++){
+          const k = localStorage.key(i);
+          if(k && k.indexOf('nearer:'+prefix)===0){
+            keys.push(k.slice('nearer:'.length));
+          }
+        }
+      }catch(e){}
+      return { keys };
+    },
+    async remove(key){ try{ localStorage.removeItem('nearer:'+key); }catch(e){} }
+  };
+}
+
 let state = {
   tab: "today",
   streak: { count: 0, longest: 0, lastCheckIn: null, history: [] },
@@ -3408,8 +3503,25 @@ let state = {
   openReplyPostId: null,
   bookBrowserOpen: false,
   bookBrowserTestament: "OT",
-  bookBrowserBook: null
+  bookBrowserBook: null,
+  crisisView: "help",
+  theme: null // 'light' | 'dark' | null(=auto)
 };
+
+function systemPrefersDark(){
+  try{ return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }catch(e){ return false; }
+}
+function effectiveDark(){
+  if(state.theme === 'dark') return true;
+  if(state.theme === 'light') return false;
+  return systemPrefersDark();
+}
+function applyTheme(){
+  document.body.classList.toggle('dark', effectiveDark());
+}
+async function saveTheme(){
+  try{ await window.storage.set('theme', state.theme || 'auto', false); }catch(e){}
+}
 
 function todayStr(){
   const d = new Date();
@@ -3463,6 +3575,11 @@ async function loadAll(){
     state.profile.name = "Friend " + Math.floor(Math.random()*900+100);
     saveProfile();
   }
+  try{
+    const t = await window.storage.get('theme');
+    if(t && t.value){ state.theme = (t.value === 'auto') ? null : t.value; }
+  }catch(e){}
+  applyTheme();
   await loadPosts();
   state.loaded = true;
 }
@@ -3961,6 +4078,14 @@ function renderMe(){
         <input id="name-input" value="${escapeHtml(state.profile.name)}" placeholder="Your display name" />
         <button class="btn btn-primary" id="save-name">Save</button>
       </div>
+      <div class="theme-row">
+        <span class="theme-label">Theme</span>
+        <div class="theme-seg">
+          <button class="theme-opt ${state.theme===null?'on':''}" data-theme="auto">Auto</button>
+          <button class="theme-opt ${state.theme==='light'?'on':''}" data-theme="light">Light</button>
+          <button class="theme-opt ${state.theme==='dark'?'on':''}" data-theme="dark">Dark</button>
+        </div>
+      </div>
       <div class="stat-grid">
         <div class="stat-card">
           <div class="stat-num">${state.streak.count||0}</div>
@@ -3995,6 +4120,7 @@ function renderMe(){
 // MAIN RENDER
 // ============================================================
 function render(){
+  applyTheme();
   const content = document.getElementById('content');
   let html = '';
   if(state.tab === 'today') html = renderToday();
@@ -4239,6 +4365,14 @@ function attachHandlers(){
     continueBackdrop.onclick = (e) => { if(e.target.id === 'continue-popup-backdrop'){ state.showContinuePopup = false; render(); } };
   }
 
+  document.querySelectorAll('.theme-opt').forEach(btn => {
+    btn.onclick = async () => {
+      const v = btn.dataset.theme;
+      state.theme = (v === 'auto') ? null : v;
+      await saveTheme();
+      render();
+    };
+  });
   const saveNameBtn = document.getElementById('save-name');
   if(saveNameBtn){
     saveNameBtn.onclick = async () => {
